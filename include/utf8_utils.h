@@ -31,5 +31,30 @@ inline std::string codepoint_to_utf8(char32_t cp) {
     return result;
 }
 
+// Decodes the next codepoint from a UTF-8 string, advancing the index. Returns U+FFFD on error.
+inline char32_t next_codepoint(const std::string& str, size_t& i) {
+    if (i >= str.size()) return 0xFFFD;
+    unsigned char c = str[i];
+    if (c < 0x80) {
+        return str[i++];
+    } else if ((c >> 5) == 0x6 && i + 1 < str.size()) {
+        char32_t cp = ((str[i] & 0x1F) << 6) | (str[i+1] & 0x3F);
+        i += 2;
+        return cp;
+    } else if ((c >> 4) == 0xE && i + 2 < str.size()) {
+        char32_t cp = ((str[i] & 0x0F) << 12) | ((str[i+1] & 0x3F) << 6) | (str[i+2] & 0x3F);
+        i += 3;
+        return cp;
+    } else if ((c >> 3) == 0x1E && i + 3 < str.size()) {
+        char32_t cp = ((str[i] & 0x07) << 18) | ((str[i+1] & 0x3F) << 12) |
+                      ((str[i+2] & 0x3F) << 6) | (str[i+3] & 0x3F);
+        i += 4;
+        return cp;
+    }
+    // Invalid, skip
+    ++i;
+    return 0xFFFD;
+}
+
 } // namespace utf8_utils
 } // namespace unicode_confusables

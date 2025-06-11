@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <cctype>
 #include "utf8_utils.h"
+#include <functional>
 
 // Helper to trim whitespace from both ends
 static inline std::string trim(const std::string& s) {
@@ -19,6 +20,25 @@ static inline std::string trim(const std::string& s) {
 // Helper to parse a hex string to char32_t
 static char32_t parse_hex(const std::string& s) {
     return static_cast<char32_t>(std::stoul(s, nullptr, 16));
+}
+
+// Helper function to escape C++ string literals for header output
+std::string escape_cpp_string(const std::string& str) {
+    std::ostringstream oss;
+    for (unsigned char c : str) {
+        if (c == '\\') oss << "\\\\";
+        else if (c == '"') oss << "\\\"";
+        else if (c == '\n') oss << "\\n";
+        else if (c == '\r') oss << "\\r";
+        else if (c == '\t') oss << "\\t";
+        else if (c < 32 || c > 126) {
+            oss << "\\" << std::oct << std::setfill('0') << std::setw(3)
+                << static_cast<unsigned int>(c) << std::dec;
+        } else {
+            oss << static_cast<char>(c);
+        }
+    }
+    return oss.str();
 }
 
 int main(int argc, char* argv[]) {
@@ -42,10 +62,10 @@ int main(int argc, char* argv[]) {
     ofs_header << "#pragma once\n\n";
     ofs_header << "// Auto-generated from " << input_file << "\n";
     ofs_header << "#include <unordered_map>\n#include <string>\n\n";
-    ofs_header << "static const std::unordered_map<std::string, std::string> CONFUSABLES_MAP = {\n";
 
+    // First, parse all entries into raw_entries
+    std::vector<std::pair<std::string, std::string>> raw_entries;
     std::string line;
-    size_t count = 0;
     while (std::getline(ifs, line)) {
         // Remove comments
         auto hash_pos = line.find('#');
@@ -79,39 +99,49 @@ int main(int argc, char* argv[]) {
         }
         if (dst_str.empty()) continue;
 
-        // Write entry - using octal escapes to avoid hex sequence ambiguity
-        ofs_header << "    { \"";
-        // Escape the source string for C++ string literal
-        for (unsigned char c : src_str) {
-            if (c == '\\') ofs_header << "\\\\";
-            else if (c == '"') ofs_header << "\\\"";
-            else if (c == '\n') ofs_header << "\\n";
-            else if (c == '\r') ofs_header << "\\r";
-            else if (c == '\t') ofs_header << "\\t";
-            else if (c < 32 || c > 126) {
-                ofs_header << "\\" << std::oct << std::setfill('0') << std::setw(3) 
-                          << static_cast<unsigned int>(c) << std::dec;
+        raw_entries.emplace_back(src_str, dst_str);
+    }
+
+    // Build equivalence classes using union-find
+    std::unordered_map<std::string, std::string> parent;
+    std::function<std::string(const std::string&)> find_representative_and_update;
+    find_representative_and_update = [&](const std::string& s) -> std::string {
+        if (parent.find(s) == parent.end() || parent[s] == s) return s;
+        return parent[s] = find_representative_and_update(parent[s]);
+    };
+    auto unite = [&](const std::string& a, const std::string& b) {
+        std::string pa = find_representative_and_update(a);
+        std::string pb = find_representative_and_update(b);
+        if (pa != pb) {
+            if (pa < pb) { // this is the part that ensures that normalized representatives are lexicographically smallest
+                parent[pb] = pa;
             } else {
-                ofs_header << static_cast<char>(c);
+                parent[pa] = pb;
             }
         }
-        ofs_header << "\", \"";
-        // Escape the destination string for C++ string literal
-        for (unsigned char c : dst_str) {
-            if (c == '\\') ofs_header << "\\\\";
-            else if (c == '"') ofs_header << "\\\"";
-            else if (c == '\n') ofs_header << "\\n";
-            else if (c == '\r') ofs_header << "\\r";
-            else if (c == '\t') ofs_header << "\\t";
-            else if (c < 32 || c > 126) {
-                ofs_header << "\\" << std::oct << std::setfill('0') << std::setw(3) 
-                          << static_cast<unsigned int>(c) << std::dec;
-            } else {
-                ofs_header << static_cast<char>(c);
-            }
+    };
+    // Add all pairs (src, dst) as equivalent
+    for (const auto& entry : raw_entries) {
+        const std::string& src = entry.first;
+        const std::string& dst = entry.second;
+        unite(src, dst);
+    }
+    // Collect all members of each class
+    std::unordered_map<std::string, std::vector<std::string>> classes;
+    for (const auto& entry : parent) {
+        std::string rep = find_representative_and_update(entry.first);
+        classes[rep].push_back(entry.first);
+    }
+    // Emit the canonical map directly from classes
+    ofs_header << "static const std::unordered_map<std::string, std::string> CONFUSABLES_MAP = {\n";
+    size_t count = 0;
+    for (const auto& kv : classes) {
+        const std::string& canon = kv.first;
+        const std::vector<std::string>& members = kv.second;
+        for (const std::string& s : members) {
+            ofs_header << "    { \"" << escape_cpp_string(s) << "\", \"" << escape_cpp_string(canon) << "\" },\n";
+            ++count;
         }
-        ofs_header << "\" },\n";
-        ++count;
     }
     ofs_header << "};\n";
     ofs_header << "// Entries: " << count << "\n";
