@@ -1,8 +1,8 @@
 #include "unicode_confusables.h"
 #include "unicode_confusables_data.h"
+#include "utf8_utils.h"
 #include <unordered_map>
 #include <string>
-#include <vector>
 #include <unicode/unistr.h>
 #include <unicode/normalizer2.h>
 #include <unicode/errorcode.h>
@@ -12,15 +12,17 @@ namespace unicode_confusables {
 // Returns true if the string contains any confusable Unicode characters
 bool contains_confusables(const std::string& input) {
     icu::UnicodeString ustr = icu::UnicodeString::fromUTF8(input);
-    for (int32_t i = 0; i < ustr.length(); ++i) {
+    
+    for (int32_t i = 0; i < ustr.length(); ) {
         char32_t cp = ustr.char32At(i);
-        if (CONFUSABLES_MAP.find(cp) != CONFUSABLES_MAP.end()) {
+        std::string utf8_char = utf8_utils::codepoint_to_utf8(cp);
+        
+        if (CONFUSABLES_MAP.find(utf8_char) != CONFUSABLES_MAP.end()) {
             return true;
         }
-        // If surrogate pair, skip the next code unit
-        if (U_IS_LEAD(ustr[i]) && i + 1 < ustr.length() && U_IS_TRAIL(ustr[i+1])) {
-            ++i;
-        }
+        
+        int32_t charLen = U16_LENGTH(cp);
+        i += charLen;
     }
     return false;
 }
@@ -28,22 +30,23 @@ bool contains_confusables(const std::string& input) {
 // Returns a new string with confusable characters replaced by their canonical equivalents
 std::string normalize_confusables(const std::string& input) {
     icu::UnicodeString ustr = icu::UnicodeString::fromUTF8(input);
-    icu::UnicodeString out;
+    std::string result;
+    
     for (int32_t i = 0; i < ustr.length(); ) {
         char32_t cp = ustr.char32At(i);
-        auto it = CONFUSABLES_MAP.find(cp);
+        std::string utf8_char = utf8_utils::codepoint_to_utf8(cp);
+        
+        auto it = CONFUSABLES_MAP.find(utf8_char);
         if (it != CONFUSABLES_MAP.end()) {
-            for (char32_t mapped : it->second) {
-                out.append(static_cast<UChar32>(mapped));
-            }
+            result += it->second;
         } else {
-            out.append(static_cast<UChar32>(cp));
+            result += utf8_char;
         }
+        
         int32_t charLen = U16_LENGTH(cp);
         i += charLen;
     }
-    std::string result;
-    out.toUTF8String(result);
+    
     return result;
 }
 

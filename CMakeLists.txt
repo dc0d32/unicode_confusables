@@ -19,6 +19,7 @@ link_directories(${ICU_LIBRARY_DIRS})
 
 # Build codegen tool first
 add_executable(confusables_codegen tools/confusables_codegen.cpp)
+target_include_directories(confusables_codegen PRIVATE include)
 target_link_libraries(confusables_codegen PRIVATE ${ICU_LIBRARIES})
 
 # Generate the confusables data header at build time
@@ -39,11 +40,13 @@ target_link_libraries(unicode_confusables PUBLIC ${ICU_LIBRARIES})
 add_dependencies(unicode_confusables generate_confusables_header)
 
 add_executable(test_confusables tests/test_confusables.cc)
+target_include_directories(test_confusables PRIVATE include)
 target_link_libraries(test_confusables PRIVATE unicode_confusables ${ICU_LIBRARIES})
 add_dependencies(test_confusables generate_confusables_header)
 
 # Console application for normalizing confusables
 add_executable(confusables_normalize apps/confusables_normalize.cpp)
+target_include_directories(confusables_normalize PRIVATE include)
 target_link_libraries(confusables_normalize PRIVATE unicode_confusables ${ICU_LIBRARIES})
 add_dependencies(confusables_normalize generate_confusables_header)
 

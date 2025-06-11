@@ -1,4 +1,5 @@
 #include "unicode_confusables.h"
+#include "utf8_utils.h"
 #include <cassert>
 #include <iostream>
 #include <string>
@@ -59,11 +60,37 @@ void test_nfkd_normalization() {
     assert(result == expected && "NFKD normalization failed for 'café'");
 }
 
+void test_utf8_conversion() {
+        // Test some Unicode codepoints
+    char32_t test_codepoints[] = {
+        0x48,      // 'H' (ASCII)
+        0xE9,      // 'é' (Latin-1 Supplement)
+        0x4E2D,    // '中' (CJK)
+        0x1F600,   // '😀' (Emoji)
+    };
+
+    std::string expected_utf8[] = {
+        "H",        // U+0048
+        "\xC3\xA9", // U+00E9
+        "\xE4\xB8\xAD", // U+4E2D
+        "\xF0\x9F\x98\x80" // U+1F600
+    };
+    
+    std::cout << "Testing UTF-8 conversion utility:\n";
+    for (size_t i = 0; i < sizeof(test_codepoints) / sizeof(test_codepoints[0]); ++i) {
+        char32_t cp = test_codepoints[i];
+        std::string utf8_str = unicode_confusables::utf8_utils::codepoint_to_utf8(cp);
+        // assert
+        assert(utf8_str == expected_utf8[i]);
+    }
+}
+
 int main() {
     test_cyrillic_confusable();
     test_greek_confusable();
     test_ascii_negative();
     test_nfkd_normalization();
+    test_utf8_conversion();
     std::cout << "All tests passed!\n";
     return 0;
 }

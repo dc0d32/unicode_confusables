@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cctype>
+#include "utf8_utils.h"
 
 // Helper to trim whitespace from both ends
 static inline std::string trim(const std::string& s) {
@@ -40,8 +41,8 @@ int main(int argc, char* argv[]) {
     }
     ofs_header << "#pragma once\n\n";
     ofs_header << "// Auto-generated from " << input_file << "\n";
-    ofs_header << "#include <unordered_map>\n#include <vector>\n#include <cstdint>\n\n";
-    ofs_header << "static const std::unordered_map<char32_t, std::vector<char32_t>> CONFUSABLES_MAP = {\n";
+    ofs_header << "#include <unordered_map>\n#include <string>\n\n";
+    ofs_header << "static const std::unordered_map<std::string, std::string> CONFUSABLES_MAP = {\n";
 
     std::string line;
     size_t count = 0;
@@ -66,23 +67,50 @@ int main(int argc, char* argv[]) {
         std::string src_hex = cells[0];
         if (src_hex.empty()) continue;
         char32_t src = parse_hex(src_hex);
+        std::string src_str = unicode_confusables::utf8_utils::codepoint_to_utf8(src);
 
-        // Parse destination sequence as vector<char32_t>
+        // Parse destination sequence as UTF-8 string
         std::istringstream iss(cells[1]);
         std::string codept;
-        std::vector<char32_t> dst;
+        std::string dst_str;
         while (iss >> codept) {
-            dst.push_back(parse_hex(codept));
+            char32_t cp = parse_hex(codept);
+            dst_str += unicode_confusables::utf8_utils::codepoint_to_utf8(cp);
         }
-        if (dst.empty()) continue;
+        if (dst_str.empty()) continue;
 
-        // Write entry
-        ofs_header << "    { 0x" << std::hex << std::uppercase << src << ", { ";
-        for (size_t i = 0; i < dst.size(); ++i) {
-            if (i > 0) ofs_header << ", ";
-            ofs_header << "0x" << std::hex << std::uppercase << dst[i];
+        // Write entry - using octal escapes to avoid hex sequence ambiguity
+        ofs_header << "    { \"";
+        // Escape the source string for C++ string literal
+        for (unsigned char c : src_str) {
+            if (c == '\\') ofs_header << "\\\\";
+            else if (c == '"') ofs_header << "\\\"";
+            else if (c == '\n') ofs_header << "\\n";
+            else if (c == '\r') ofs_header << "\\r";
+            else if (c == '\t') ofs_header << "\\t";
+            else if (c < 32 || c > 126) {
+                ofs_header << "\\" << std::oct << std::setfill('0') << std::setw(3) 
+                          << static_cast<unsigned int>(c) << std::dec;
+            } else {
+                ofs_header << static_cast<char>(c);
+            }
         }
-        ofs_header << " } },\n";
+        ofs_header << "\", \"";
+        // Escape the destination string for C++ string literal
+        for (unsigned char c : dst_str) {
+            if (c == '\\') ofs_header << "\\\\";
+            else if (c == '"') ofs_header << "\\\"";
+            else if (c == '\n') ofs_header << "\\n";
+            else if (c == '\r') ofs_header << "\\r";
+            else if (c == '\t') ofs_header << "\\t";
+            else if (c < 32 || c > 126) {
+                ofs_header << "\\" << std::oct << std::setfill('0') << std::setw(3) 
+                          << static_cast<unsigned int>(c) << std::dec;
+            } else {
+                ofs_header << static_cast<char>(c);
+            }
+        }
+        ofs_header << "\" },\n";
         ++count;
     }
     ofs_header << "};\n";
