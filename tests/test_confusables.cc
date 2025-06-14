@@ -51,13 +51,125 @@ void test_ascii_negative() {
 void test_nfkd_normalization() {
     std::string input = "caf\xC3\xA9"; // UTF-8 for café
     std::string expected = "cafe\xCC\x81"; // UTF-8 for 'e' + U+0301
-    std::string result = unicode_normalize_kd(input, false);
+    std::string result = unicode_normalize(input, NormalizationType::NFKD, false);
     if (result != expected) {
         std::cout << "[FAIL] test_nfkd_normalization:\n  got:      '" << result << "'\n  expected: '" << expected << "'\n";
         std::cout.flush();
         return;
     }
     assert(result == expected && "NFKD normalization failed for 'café'");
+}
+
+void test_nfd_normalization() {
+    std::string input = "caf\xC3\xA9"; // UTF-8 for café
+    std::string expected = "cafe\xCC\x81"; // UTF-8 for 'e' + U+0301 (combining acute accent)
+    std::string result = unicode_normalize(input, NormalizationType::NFD, false);
+    if (result != expected) {
+        std::cout << "[FAIL] test_nfd_normalization:\n  got:      '" << result << "'\n  expected: '" << expected << "'\n";
+        std::cout.flush();
+        return;
+    }
+    assert(result == expected && "NFD normalization failed for 'café'");
+}
+
+void test_nfd_vs_nfkd() {
+    // Test with ﬁ (ligature fi, U+FB01) - NFKD decomposes it, NFD doesn't
+    std::string input = "\xEF\xAC\x81"; // UTF-8 for ﬁ (U+FB01)
+    
+    std::string nfd_result = unicode_normalize(input, NormalizationType::NFD, false);
+    std::string nfkd_result = unicode_normalize(input, NormalizationType::NFKD, false);
+    
+    // NFD should preserve the ligature (no decomposition for compatibility characters)
+    std::string expected_nfd = "\xEF\xAC\x81"; // Still ﬁ
+    // NFKD should decompose to "fi"
+    std::string expected_nfkd = "fi";
+    
+    if (nfd_result != expected_nfd) {
+        std::cout << "[FAIL] test_nfd_vs_nfkd (NFD part):\n  got:      '" << nfd_result << "'\n  expected: '" << expected_nfd << "'\n";
+        std::cout.flush();
+        return;
+    }
+    if (nfkd_result != expected_nfkd) {
+        std::cout << "[FAIL] test_nfd_vs_nfkd (NFKD part):\n  got:      '" << nfkd_result << "'\n  expected: '" << expected_nfkd << "'\n";
+        std::cout.flush();
+        return;
+    }
+    
+    assert(nfd_result == expected_nfd && "NFD should not decompose compatibility characters");
+    assert(nfkd_result == expected_nfkd && "NFKD should decompose compatibility characters");
+}
+
+void test_zero_width_stripping() {
+    // Test with zero-width joiner (U+200D) and zero-width non-joiner (U+200C)
+    std::string input = "a\xE2\x80\x8D" "b\xE2\x80\x8C" "c"; // a + ZWJ + b + ZWNJ + c
+    
+    // Without stripping zero-width characters
+    std::string result_with_zw = unicode_normalize(input, NormalizationType::NFD, false);
+    std::string expected_with_zw = "a\xE2\x80\x8D" "b\xE2\x80\x8C" "c";
+    
+    // With stripping zero-width characters
+    std::string result_without_zw = unicode_normalize(input, NormalizationType::NFD, true);
+    std::string expected_without_zw = "abc";
+    
+    if (result_with_zw != expected_with_zw) {
+        std::cout << "[FAIL] test_zero_width_stripping (with ZW):\n  got:      '" << result_with_zw << "'\n  expected: '" << expected_with_zw << "'\n";
+        std::cout.flush();
+        return;
+    }
+    if (result_without_zw != expected_without_zw) {
+        std::cout << "[FAIL] test_zero_width_stripping (without ZW):\n  got:      '" << result_without_zw << "'\n  expected: '" << expected_without_zw << "'\n";
+        std::cout.flush();
+        return;
+    }
+    
+    assert(result_with_zw == expected_with_zw && "NFD should preserve zero-width characters when not stripping");
+    assert(result_without_zw == expected_without_zw && "NFD should remove zero-width characters when stripping");
+}
+
+void test_nfd_empty_and_ascii() {
+    // Test empty string
+    std::string empty_result = unicode_normalize("", NormalizationType::NFD, false);
+    assert(empty_result == "" && "NFD of empty string should be empty");
+    
+    // Test ASCII (should remain unchanged)
+    std::string ascii = "Hello World!";
+    std::string ascii_result = unicode_normalize(ascii, NormalizationType::NFD, false);
+    assert(ascii_result == ascii && "NFD of ASCII should remain unchanged");
+    
+    // Test ASCII with zero-width stripping
+    std::string ascii_result_stripped = unicode_normalize(ascii, NormalizationType::NFD, true);
+    assert(ascii_result_stripped == ascii && "NFD of ASCII with stripping should remain unchanged");
+}
+
+void test_all_normalization_types() {
+    // Test with composed character é (U+00E9)
+    std::string input_composed = "\xC3\xA9"; // UTF-8 for é
+    
+    // Test with decomposed character e + combining acute accent
+    std::string input_decomposed = "e\xCC\x81"; // UTF-8 for 'e' + U+0301
+    
+    // Test NFC - should compose
+    std::string nfc_result = unicode_normalize(input_decomposed, NormalizationType::NFC, false);
+    std::string expected_nfc = "\xC3\xA9"; // Should be é
+    assert(nfc_result == expected_nfc && "NFC should compose characters");
+    
+    // Test NFD - should decompose
+    std::string nfd_result = unicode_normalize(input_composed, NormalizationType::NFD, false);
+    std::string expected_nfd = "e\xCC\x81"; // Should be e + combining accent
+    assert(nfd_result == expected_nfd && "NFD should decompose characters");
+    
+    // Test with ligature ﬁ for NFKC/NFKD
+    std::string ligature = "\xEF\xAC\x81"; // UTF-8 for ﬁ (U+FB01)
+    
+    // Test NFKC - should decompose compatibility and then compose
+    std::string nfkc_result = unicode_normalize(ligature, NormalizationType::NFKC, false);
+    std::string expected_nfkc = "fi"; // Should be regular fi
+    assert(nfkc_result == expected_nfkc && "NFKC should decompose compatibility characters");
+    
+    // Test NFKD - should decompose compatibility
+    std::string nfkd_result = unicode_normalize(ligature, NormalizationType::NFKD, false);
+    std::string expected_nfkd = "fi"; // Should be regular fi
+    assert(nfkd_result == expected_nfkd && "NFKD should decompose compatibility characters");
 }
 
 void test_utf8_conversion() {
@@ -90,6 +202,11 @@ int main() {
     test_greek_confusable();
     test_ascii_negative();
     test_nfkd_normalization();
+    test_nfd_normalization();
+    test_nfd_vs_nfkd();
+    test_zero_width_stripping();
+    test_nfd_empty_and_ascii();
+    test_all_normalization_types();
     test_utf8_conversion();
     std::cout << "All tests passed!\n";
     return 0;
