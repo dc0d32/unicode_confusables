@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>UnicodeConfusables</AssemblyName>
+    <RootNamespace>UnicodeConfusables</RootNamespace>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>UnicodeConfusables</PackageId>
+    <PackageVersion>1.0.0</PackageVersion>
+    <Authors>Unicode Confusables Library</Authors>
+    <Description>C# bindings for the Unicode Confusables detection and normalization library</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="runtimes/**/*" Pack="true" PackagePath="runtimes/" />
+  </ItemGroup>
+
+</Project>

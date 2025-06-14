@@ -1,0 +1,88 @@
+# Bindings .gitignore
+# Ignore build artifacts and temporary files for both C# and Python bindings
+
+# Python bindings
+python/build/
+python/dist/
+python/venv/
+python/env/
+python/.env
+python/*.egg-info/
+python/__pycache__/
+python/*.pyc
+python/*.pyo
+python/*.pyd
+python/.Python
+python/pip-log.txt
+python/pip-delete-this-directory.txt
+python/.coverage
+python/.pytest_cache/
+python/htmlcov/
+python/*.so
+python/*.dll
+python/*.dylib
+python/src/
+python/unicode_confusables/__pycache__/
+
+# C# bindings
+csharp/bin/
+csharp/obj/
+csharp/build/
+csharp/packages/
+csharp/runtimes/
+csharp/*.dll
+csharp/*.exe
+csharp/*.pdb
+csharp/*.user
+csharp/*.suo
+csharp/*.cache
+csharp/TestResults/
+csharp/.vs/
+csharp/project.lock.json
+csharp/project.fragment.lock.json
+csharp/artifacts/
+
+# Native libraries (shared objects, dynamic libraries)
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+
+# Build directories
+build/
+Build/
+BUILD/
+debug/
+Debug/
+release/
+Release/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Archive files
+*.zip
+*.tar.gz
+*.7z

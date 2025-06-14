@@ -88,3 +88,49 @@ add_dependencies(confusables_normalize generate_confusables_header)
 
 enable_testing()
 add_test(NAME ConfusablesTest COMMAND test_confusables)
+
+# Build bindings (optional)
+option(BUILD_CSHARP_BINDINGS "Build C# bindings" OFF)
+option(BUILD_PYTHON_BINDINGS "Build Python bindings" OFF)
+
+# C# bindings
+if(BUILD_CSHARP_BINDINGS)
+    # Build the C wrapper library for C# bindings
+    add_library(unicode_confusables_csharp SHARED 
+        bindings/csharp/unicode_confusables_c.cpp
+        src/unicode_confusables.cpp 
+        src/unicode_confusables_data.cpp
+    )
+    target_include_directories(unicode_confusables_csharp PUBLIC 
+        include
+        bindings/csharp
+    )
+    target_link_libraries(unicode_confusables_csharp PUBLIC ${ICU_LIBRARIES})
+    add_dependencies(unicode_confusables_csharp generate_confusables_header)
+    
+    # Set the library name for consistent cross-platform usage
+    set_target_properties(unicode_confusables_csharp PROPERTIES
+        OUTPUT_NAME "unicode_confusables_csharp"
+        PREFIX ""
+    )
+endif()
+
+# Python bindings
+if(BUILD_PYTHON_BINDINGS)
+    find_package(pybind11 QUIET)
+    if(pybind11_FOUND)
+        pybind11_add_module(unicode_confusables_py 
+            bindings/python/unicode_confusables_py.cpp
+            src/unicode_confusables.cpp 
+            src/unicode_confusables_data.cpp
+        )
+        target_include_directories(unicode_confusables_py PRIVATE include)
+        target_link_libraries(unicode_confusables_py PRIVATE ${ICU_LIBRARIES})
+        add_dependencies(unicode_confusables_py generate_confusables_header)
+        
+        # Set properties for the Python module
+        target_compile_definitions(unicode_confusables_py PRIVATE VERSION_INFO=${EXAMPLE_VERSION_INFO})
+    else()
+        message(WARNING "pybind11 not found. Python bindings will not be built. Install pybind11 and reconfigure to enable Python bindings.")
+    endif()
+endif()
