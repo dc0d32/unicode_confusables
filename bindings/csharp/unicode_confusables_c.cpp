@@ -60,11 +60,20 @@ char* unicode_confusables_normalize_confusables(const char* input) {
     }
 }
 
-char* unicode_confusables_unicode_normalize_kd(const char* input, int strip_zero_width) {
+char* unicode_confusables_unicode_normalize(const char* input, int type, int strip_zero_width) {
     if (!input) return nullptr;
     
     try {
-        std::string result = unicode_confusables::unicode_normalize_kd(std::string(input), strip_zero_width != 0);
+        unicode_confusables::NormalizationType norm_type;
+        switch (type) {
+            case 0: norm_type = unicode_confusables::NormalizationType::NFC; break;
+            case 1: norm_type = unicode_confusables::NormalizationType::NFD; break;
+            case 2: norm_type = unicode_confusables::NormalizationType::NFKC; break;
+            case 3: norm_type = unicode_confusables::NormalizationType::NFKD; break;
+            default: return nullptr;
+        }
+        
+        std::string result = unicode_confusables::unicode_normalize(std::string(input), norm_type, strip_zero_width != 0);
         char* c_result = static_cast<char*>(malloc(result.length() + 1));
         if (c_result) {
             strcpy(c_result, result.c_str());

@@ -6,6 +6,21 @@ using System.Text;
 namespace UnicodeConfusables
 {
     /// <summary>
+    /// Unicode normalization types
+    /// </summary>
+    public enum NormalizationType
+    {
+        /// <summary>Normalization Form Composed</summary>
+        NFC = 0,
+        /// <summary>Normalization Form Decomposed</summary>
+        NFD = 1,
+        /// <summary>Normalization Form Compatibility Composed</summary>
+        NFKC = 2,
+        /// <summary>Normalization Form Compatibility Decomposed</summary>
+        NFKD = 3
+    }
+
+    /// <summary>
     /// Provides utilities for detecting and normalizing Unicode confusable characters.
     /// </summary>
     public static class ConfusablesDetector
@@ -28,7 +43,7 @@ namespace UnicodeConfusables
         private static extern IntPtr unicode_confusables_normalize_confusables([MarshalAs(UnmanagedType.LPUTF8Str)] string input);
 
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
-        private static extern IntPtr unicode_confusables_unicode_normalize_kd([MarshalAs(UnmanagedType.LPUTF8Str)] string input, int stripZeroWidth);
+        private static extern IntPtr unicode_confusables_unicode_normalize([MarshalAs(UnmanagedType.LPUTF8Str)] string input, int type, int stripZeroWidth);
 
         [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
         private static extern void unicode_confusables_free_string(IntPtr str);
@@ -100,18 +115,19 @@ namespace UnicodeConfusables
         }
 
         /// <summary>
-        /// Returns a new string with NFKD normalization applied.
+        /// Returns a new string with Unicode normalization applied.
         /// </summary>
         /// <param name="input">The input string to normalize</param>
+        /// <param name="type">The type of normalization to apply</param>
         /// <param name="stripZeroWidth">If true, zero-width characters are removed after normalization</param>
-        /// <returns>A NFKD normalized string</returns>
+        /// <returns>A normalized string</returns>
         /// <exception cref="ArgumentNullException">Thrown when input is null</exception>
-        public static string UnicodeNormalizeKd(string input, bool stripZeroWidth = false)
+        public static string UnicodeNormalize(string input, NormalizationType type, bool stripZeroWidth = false)
         {
             if (input == null)
                 throw new ArgumentNullException(nameof(input));
 
-            IntPtr resultPtr = unicode_confusables_unicode_normalize_kd(input, stripZeroWidth ? 1 : 0);
+            IntPtr resultPtr = unicode_confusables_unicode_normalize(input, (int)type, stripZeroWidth ? 1 : 0);
             if (resultPtr == IntPtr.Zero)
                 return input; // Return original string if normalization fails
 
@@ -123,6 +139,19 @@ namespace UnicodeConfusables
             {
                 unicode_confusables_free_string(resultPtr);
             }
+        }
+
+        /// <summary>
+        /// Returns a new string with NFKD normalization applied.
+        /// </summary>
+        /// <param name="input">The input string to normalize</param>
+        /// <param name="stripZeroWidth">If true, zero-width characters are removed after normalization</param>
+        /// <returns>A NFKD normalized string</returns>
+        /// <exception cref="ArgumentNullException">Thrown when input is null</exception>
+        [Obsolete("Use UnicodeNormalize with NormalizationType.NFKD instead")]
+        public static string UnicodeNormalizeKd(string input, bool stripZeroWidth = false)
+        {
+            return UnicodeNormalize(input, NormalizationType.NFKD, stripZeroWidth);
         }
     }
 }

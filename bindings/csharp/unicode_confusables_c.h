@@ -14,7 +14,7 @@ int unicode_confusables_set_size(ConfusablesSetHandle handle);
 const char* unicode_confusables_set_get(ConfusablesSetHandle handle, int index);
 
 char* unicode_confusables_normalize_confusables(const char* input);
-char* unicode_confusables_unicode_normalize_kd(const char* input, int strip_zero_width);
+char* unicode_confusables_unicode_normalize(const char* input, int type, int strip_zero_width);
 void unicode_confusables_free_string(char* str);
 
 #ifdef __cplusplus

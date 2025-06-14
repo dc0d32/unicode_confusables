@@ -34,12 +34,32 @@ try:
     except Exception as ex:
         print(f"Error normalizing confusables: {ex}")
 
-    # Test unicode_normalize_kd
+    # Test unicode_normalize with different types
+    try:
+        # Test NFD normalization
+        nfd_normalized = unicode_confusables.unicode_normalize(test_input, unicode_confusables.NormalizationType.NFD, strip_zero_width=True)
+        print(f"NFD Normalized: {nfd_normalized}")
+        
+        # Test NFKD normalization
+        nfkd_normalized = unicode_confusables.unicode_normalize(test_input, unicode_confusables.NormalizationType.NFKD, strip_zero_width=True)
+        print(f"NFKD Normalized: {nfkd_normalized}")
+        
+        # Test NFC normalization
+        nfc_normalized = unicode_confusables.unicode_normalize(test_input, unicode_confusables.NormalizationType.NFC, strip_zero_width=True)
+        print(f"NFC Normalized: {nfc_normalized}")
+        
+        # Test NFKC normalization
+        nfkc_normalized = unicode_confusables.unicode_normalize(test_input, unicode_confusables.NormalizationType.NFKC, strip_zero_width=True)
+        print(f"NFKC Normalized: {nfkc_normalized}")
+    except Exception as ex:
+        print(f"Error with Unicode normalization: {ex}")
+
+    # Test legacy unicode_normalize_kd (for backward compatibility)
     try:
         kd_normalized = unicode_confusables.unicode_normalize_kd(test_input, strip_zero_width=True)
-        print(f"NFKD Normalized: {kd_normalized}")
+        print(f"Legacy NFKD Normalized: {kd_normalized}")
     except Exception as ex:
-        print(f"Error with NFKD normalization: {ex}")
+        print(f"Error with legacy NFKD normalization: {ex}")
 
     print("\nAll tests completed successfully!")
 
