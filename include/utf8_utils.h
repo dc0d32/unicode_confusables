@@ -56,5 +56,15 @@ inline char32_t next_codepoint(const std::string& str, size_t& i) {
     return 0xFFFD;
 }
 
+/**
+ * Extract the first Unicode codepoint from a UTF-8 encoded string.
+ * @param str The UTF-8 encoded string
+ * @return The first Unicode codepoint, or U+FFFD on error
+ */
+inline char32_t get_first_codepoint_from_utf8(const std::string& str) {
+    size_t i = 0;
+    return next_codepoint(str, i);
+}
+
 } // namespace utf8_utils
 } // namespace unicode_confusables

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <sstream>
 #include <iomanip>
 #include <cctype>
@@ -10,6 +11,31 @@
 #include <functional>
 #include <unicode/unistr.h>
 #include <unicode/normalizer2.h>
+
+// This tool generates C++ header and source files from a confusables data file.
+
+// The input file should contain lines of the form:
+// <source_codepoint_hex>; <destination_codepoint_hex> [<destination_codepoint_hex> ...]
+// where source_codepoint_hex is a single Unicode code point in hexadecimal format (e.g., "0041" for 'A'),
+// and destination_codepoint_hex is one or more Unicode code points that are visually confusable with the source.
+// The output will be two files:
+// 1. unicode_confusables_data.h - a header file with declarations of the confusable mappings.
+// 2. unicode_confusables_data.cpp - a source file with the actual mappings initialized.
+// The generated code will use ICU for Unicode handling and normalization.
+
+static std::unordered_set<char32_t> acceptable_emoji_set = {
+    // trademark
+    0x2122, // ™
+    // registered trademark
+    0xAE, // ®
+    // copyright
+    0xA9, // ©   
+};
+
+static inline bool is_ascii(char32_t cp)
+{
+    return cp < 0x80; // ASCII range is 0x00 to 0x7F
+}
 
 // Helper to trim whitespace from both ends
 static inline std::string trim(const std::string &s)
@@ -53,13 +79,14 @@ std::string escape_cpp_string(const std::string &str)
 
 int main(int argc, char *argv[])
 {
-    if (argc != 3)
+    if (argc != 4)
     {
-        std::cerr << "Usage: " << argv[0] << " <input_file> <output_header>\n";
+        std::cerr << "Usage: " << argv[0] << " <input_file> <output_header> <output_cpp>\n";
         return 1;
     }
     std::string input_file = argv[1];
     std::string output_header = argv[2];
+    std::string output_cpp = argv[3];
 
     std::ifstream ifs(input_file);
     if (!ifs)
@@ -73,9 +100,26 @@ int main(int argc, char *argv[])
         std::cerr << "Failed to open output header for writing\n";
         return 1;
     }
+    std::ofstream ofs_cpp(output_cpp);
+    if (!ofs_cpp)
+    {
+        std::cerr << "Failed to open output cpp file for writing\n";
+        return 1;
+    }
+    
+    // Write header file
     ofs_header << "#pragma once\n\n";
     ofs_header << "// Auto-generated from " << input_file << "\n";
-    ofs_header << "#include <unordered_map>\n#include <string>\n\n";
+    ofs_header << "#include <unordered_map>\n#include <unordered_set>\n#include <string>\n\n";
+    ofs_header << "namespace unicode_confusables {\n\n";
+    ofs_header << "extern const std::unordered_map<std::string, std::string> CONFUSABLE_TO_CANONICAL;\n";
+    ofs_header << "extern const std::unordered_map<std::string, std::unordered_set<std::string>> CONFUSABLES_MAP;\n\n";
+    ofs_header << "} // namespace unicode_confusables\n";
+
+    // Write cpp file header
+    ofs_cpp << "// Auto-generated from " << input_file << "\n";
+    ofs_cpp << "#include \"unicode_confusables_data.h\"\n\n";
+    ofs_cpp << "namespace unicode_confusables {\n\n";
 
     // First, parse all entries into raw_entries
     std::vector<std::pair<std::string, std::string>> raw_entries;
@@ -118,15 +162,11 @@ int main(int argc, char *argv[])
             char32_t cp = parse_hex(codept);
             dst_str += unicode_confusables::utf8_utils::codepoint_to_utf8(cp);
         }
-        if (dst_str.empty())
-            continue;
 
         // std::cout << "Adding confusable: " << src_str << " -> " << dst_str << "\n";
         raw_entries.emplace_back(src_str, dst_str);
-        // std::cout << "Adding confusable: " << dst_str << " -> " << src_str << "\n";
-        raw_entries.emplace_back(dst_str, src_str); // add reverse mapping
-        // if src_str is single character, add case changed version
 
+        // if src_str is single character, add case changed version
         icu::UnicodeString src_unicode_str = icu::UnicodeString::fromUTF8(src_str);
         if (src_unicode_str.length() == 1)
         {
@@ -209,61 +249,125 @@ int main(int argc, char *argv[])
     
     // Do not delete normalizer; it is managed by ICU and must not be deleted
 
-    // Build equivalence classes using union-find
-    std::unordered_map<std::string, std::string> parent;
-    std::function<std::string(const std::string &)> find_representative_and_update;
-    find_representative_and_update = [&](const std::string &s) -> std::string
-    {
-        if (parent.find(s) == parent.end() || parent[s] == s)
-            return s;
-        return parent[s] = find_representative_and_update(parent[s]);
-    };
-    auto unite = [&](const std::string &a, const std::string &b)
-    {
-        std::string pa = find_representative_and_update(a);
-        std::string pb = find_representative_and_update(b);
-        if (pa != pb)
-        {
-            if (pa < pb)
-            { 
-                // this is the part that ensures that normalized representatives are lexicographically smallest
-                parent[pb] = pa;
-            }
-            else
-            {
-                parent[pa] = pb;
-            }
+    // Map all emojis to a single normalization target (private use character U+E005)
+    UErrorCode emojiSetStatus = U_ZERO_ERROR;
+    icu::UnicodeSet emojiSet(UNICODE_STRING_SIMPLE("[:Emoji:]"), emojiSetStatus);
+    emojiSet.freeze();
+    const UChar32 emoji_norm_target = 0xE005; // Private Use Area start
+    icu::UnicodeString emoji_norm_target_str(emoji_norm_target);
+    std::string emoji_norm_target_utf8;
+    emoji_norm_target_str.toUTF8String(emoji_norm_target_utf8);
+    for (UChar32 cp = 0; cp <= 0x10FFFF; ++cp) {
+        if (!emojiSet.contains(cp) || cp == emoji_norm_target) continue;
+        icu::UnicodeString emoji(cp);
+        std::string emoji_utf8;
+        emoji.toUTF8String(emoji_utf8);
+        if (!emoji_utf8.empty()) {
+            raw_entries.emplace_back(emoji_utf8, emoji_norm_target_utf8);
         }
-    };
-    // Add all pairs (src, dst) as equivalent
-    for (const auto &entry : raw_entries)
-    {
-        const std::string &src = entry.first;
-        const std::string &dst = entry.second;
-        unite(src, dst);
-    }
-    // Collect all members of each class
-    std::unordered_map<std::string, std::vector<std::string>> classes;
-    for (const auto &entry : parent)
-    {
-        std::string rep = find_representative_and_update(entry.first);
-        classes[rep].push_back(entry.first);
-    }
-    // Emit the canonical map directly from classes
-    ofs_header << "static const std::unordered_map<std::string, std::string> CONFUSABLES_MAP = {\n";
-    size_t count = 0;
-    for (const auto &kv : classes)
-    {
-        const std::string &canon = kv.first;
-        const std::vector<std::string> &members = kv.second;
-        for (const std::string &s : members)
-        {
-            ofs_header << "    { \"" << escape_cpp_string(s) << "\", \"" << escape_cpp_string(canon) << "\" },\n";
-            ++count;
+        // Also map emoji+VS16 to the normalization target
+        icu::UnicodeString emoji_vs(cp);
+        emoji_vs.append((UChar32)0xFE0F);
+        std::string emoji_vs_utf8;
+        emoji_vs.toUTF8String(emoji_vs_utf8);
+        if (!emoji_vs_utf8.empty()) {
+            raw_entries.emplace_back(emoji_vs_utf8, emoji_norm_target_utf8);
         }
     }
-    ofs_header << "};\n";
-    ofs_header << "// Entries: " << count << "\n";
-    std::cout << "Header generated: " << output_header << " with " << count << " entries.\n";
+
+    // Build two mappings:
+    // 1. confusable -> canonical (for normalization)
+    // 2. canonical -> set of confusables (for lookup operations)
+    std::unordered_map<std::string, std::string> confusable_to_canonical;
+    std::unordered_map<std::string, std::unordered_set<std::string>> canonical_to_confusables;
+    for (const auto& entry : raw_entries) {
+        // if src is ASCII, skip it
+        // this is required to avoid adding confusables for ASCII characters. The unicode mapping contains some for roman numerals, but we don't want to add those
+        // also skip some typical emojis that are not confusable
+        if (is_ascii(entry.first[0]) || acceptable_emoji_set.find(unicode_confusables::utf8_utils::get_first_codepoint_from_utf8(entry.first)) != acceptable_emoji_set.end())
+            continue;
+
+        confusable_to_canonical[entry.first] = entry.second;
+        canonical_to_confusables[entry.second].insert(entry.first);
+    }
+    // Use runtime initialization instead of large initializer lists for better compile times
+    size_t count1 = confusable_to_canonical.size();
+    size_t count2 = 0;
+    for (const auto& kv : canonical_to_confusables) {
+        count2 += kv.second.size();
+    }
+    
+    // Split data initialization into chunks to improve compilation time
+    const size_t CHUNK_SIZE = 500;  // Reduced chunk size for even better compilation performance
+    size_t chunk_num = 0;
+    
+    // Generate initialization functions for CONFUSABLE_TO_CANONICAL
+    std::vector<std::vector<std::pair<std::string, std::string>>> confusable_chunks;
+    auto it = confusable_to_canonical.begin();
+    while (it != confusable_to_canonical.end()) {
+        confusable_chunks.emplace_back();
+        for (size_t i = 0; i < CHUNK_SIZE && it != confusable_to_canonical.end(); ++i, ++it) {
+            confusable_chunks.back().emplace_back(it->first, it->second);
+        }
+    }
+    
+    // Generate chunk initialization functions
+    for (size_t i = 0; i < confusable_chunks.size(); ++i) {
+        ofs_cpp << "static void init_confusable_to_canonical_chunk_" << i << "(std::unordered_map<std::string, std::string>& map) {\n";
+        for (const auto& kv : confusable_chunks[i]) {
+            ofs_cpp << "    map[\"" << escape_cpp_string(kv.first) << "\"] = \"" << escape_cpp_string(kv.second) << "\";\n";
+        }
+        ofs_cpp << "}\n\n";
+    }
+    
+    // Generate the main map with runtime initialization
+    ofs_cpp << "const std::unordered_map<std::string, std::string> CONFUSABLE_TO_CANONICAL = []() {\n";
+    ofs_cpp << "    std::unordered_map<std::string, std::string> map;\n";
+    ofs_cpp << "    map.reserve(" << count1 << ");\n";
+    for (size_t i = 0; i < confusable_chunks.size(); ++i) {
+        ofs_cpp << "    init_confusable_to_canonical_chunk_" << i << "(map);\n";
+    }
+    ofs_cpp << "    return map;\n";
+    ofs_cpp << "}();\n\n";
+    
+    // Generate initialization functions for CONFUSABLES_MAP
+    std::vector<std::vector<std::pair<std::string, std::unordered_set<std::string>>>> confusables_map_chunks;
+    auto it2 = canonical_to_confusables.begin();
+    while (it2 != canonical_to_confusables.end()) {
+        confusables_map_chunks.emplace_back();
+        for (size_t i = 0; i < CHUNK_SIZE && it2 != canonical_to_confusables.end(); ++i, ++it2) {
+            confusables_map_chunks.back().emplace_back(it2->first, it2->second);
+        }
+    }
+    
+    // Generate chunk initialization functions for CONFUSABLES_MAP
+    for (size_t i = 0; i < confusables_map_chunks.size(); ++i) {
+        ofs_cpp << "static void init_confusables_map_chunk_" << i << "(std::unordered_map<std::string, std::unordered_set<std::string>>& map) {\n";
+        for (const auto& kv : confusables_map_chunks[i]) {
+            ofs_cpp << "    map[\"" << escape_cpp_string(kv.first) << "\"] = { ";
+            bool first = true;
+            for (const std::string& s : kv.second) {
+                if (!first) ofs_cpp << ", ";
+                ofs_cpp << "\"" << escape_cpp_string(s) << "\"";
+                first = false;
+            }
+            ofs_cpp << " };\n";
+        }
+        ofs_cpp << "}\n\n";
+    }
+    
+    // Generate the main CONFUSABLES_MAP with runtime initialization
+    ofs_cpp << "const std::unordered_map<std::string, std::unordered_set<std::string>> CONFUSABLES_MAP = []() {\n";
+    ofs_cpp << "    std::unordered_map<std::string, std::unordered_set<std::string>> map;\n";
+    ofs_cpp << "    map.reserve(" << canonical_to_confusables.size() << ");\n";
+    for (size_t i = 0; i < confusables_map_chunks.size(); ++i) {
+        ofs_cpp << "    init_confusables_map_chunk_" << i << "(map);\n";
+    }
+    ofs_cpp << "    return map;\n";
+    ofs_cpp << "}();\n\n";
+    
+    ofs_cpp << "} // namespace unicode_confusables\n";
+    ofs_cpp << "// Confusable->Canonical entries: " << count1 << ", Canonical->Confusables entries: " << count2 << "\n";
+    std::cout << "Files generated: " << output_header << " and " << output_cpp << " with " << count1 << " confusable mappings and " << count2 << " confusable entries.\n";
     return 0;
 }

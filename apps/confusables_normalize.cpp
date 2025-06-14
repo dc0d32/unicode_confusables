@@ -42,8 +42,16 @@ int main(int argc, char* argv[]) {
     while (std::getline(std::cin, line)) {
         if (check_only) {
             // Just check for confusables
-            if (unicode_confusables::contains_confusables(line)) {
-                std::cout << "CONFUSABLES_DETECTED\n";
+            auto confusables = unicode_confusables::contains_confusables(line);
+            if (!confusables.empty()) {
+                std::cout << "CONFUSABLES_DETECTED: ";
+                bool first = true;
+                for (const auto& confusable : confusables) {
+                    if (!first) std::cout << ", ";
+                    std::cout << "'" << confusable << "'";
+                    first = false;
+                }
+                std::cout << "\n";
                 exit_code = 1;
             } else {
                 std::cout << "CLEAN\n";
@@ -51,7 +59,7 @@ int main(int argc, char* argv[]) {
         } else {
             if (use_nfkd) {
                 // Apply NFKD normalization
-                line = unicode_confusables::unicode_normalize_kd(line);
+                line = unicode_confusables::unicode_normalize_kd(line, true);
             }
             // Apply confusables normalization (default)
             line = unicode_confusables::normalize_confusables(line);

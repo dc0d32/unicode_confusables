@@ -16,7 +16,7 @@ void test_cyrillic_confusable() {
         return;
     }
     assert(actual == expected_cyrillic);
-    assert(contains_confusables(cyrillic) == true);
+    assert(!contains_confusables(cyrillic).empty());
 }
 
 void test_greek_confusable() {
@@ -29,13 +29,13 @@ void test_greek_confusable() {
         return;
     }
     assert(actual == expected_greek);
-    assert(contains_confusables(greek) == true);
+    assert(!contains_confusables(greek).empty());
 }
 
 void test_ascii_negative() {
     std::string actual1 = normalize_confusables("hello");
-    if (contains_confusables("hello") != false) {
-        std::cout << "[FAIL] test_ascii_negative: contains_confusables returned true for 'hello'\n";
+    if (!contains_confusables("hello").empty()) {
+        std::cout << "[FAIL] test_ascii_negative: contains_confusables returned non-empty set for 'hello'\n";
         std::cout.flush();
         return;
     }
@@ -44,14 +44,14 @@ void test_ascii_negative() {
         std::cout.flush();
         return;
     }
-    assert(contains_confusables("hello") == false);
+    assert(contains_confusables("hello").empty());
     assert(actual1 == "hello");
 }
 
 void test_nfkd_normalization() {
     std::string input = "caf\xC3\xA9"; // UTF-8 for café
     std::string expected = "cafe\xCC\x81"; // UTF-8 for 'e' + U+0301
-    std::string result = unicode_normalize_kd(input);
+    std::string result = unicode_normalize_kd(input, false);
     if (result != expected) {
         std::cout << "[FAIL] test_nfkd_normalization:\n  got:      '" << result << "'\n  expected: '" << expected << "'\n";
         std::cout.flush();
